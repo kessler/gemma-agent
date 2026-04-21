@@ -1,10 +1,34 @@
+// ---- Media types ----
+
+export class ToolResultImage {
+  readonly type = 'image' as const
+  constructor(public readonly content: string) {}
+}
+
+export class ToolResultAudio {
+  readonly type = 'audio' as const
+  constructor(public readonly content: string) {}
+}
+
+export type MediaAttachment = ToolResultImage | ToolResultAudio
+
+export type ToolResultValue = string | number | boolean | ToolResultImage | ToolResultAudio
+
+export function image(content: string): ToolResultImage {
+  return new ToolResultImage(content)
+}
+
+export function audio(content: string): ToolResultAudio {
+  return new ToolResultAudio(content)
+}
+
 // ---- Model backend ----
 
 export interface GenerateOptions {
   maxTokens?: number
   onChunk?: (text: string) => void
   onThinkingChunk?: (text: string) => void
-  imageDataUrl?: string
+  media?: MediaAttachment[]
 }
 
 export interface ModelBackend {
@@ -40,7 +64,7 @@ export interface ToolDefinition {
     required?: string[]
   }
   /** Execute this tool with the parsed arguments. Return the result object. */
-  execute: (args: Record<string, unknown>) => Promise<Record<string, unknown>>
+  execute: (args: Record<string, unknown>) => Promise<Record<string, ToolResultValue>>
 }
 
 export interface ToolCall {
@@ -50,7 +74,7 @@ export interface ToolCall {
 
 export interface ToolResponse {
   name: string
-  result: unknown
+  result: Record<string, ToolResultValue>
 }
 
 // ---- Agent types ----

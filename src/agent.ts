@@ -6,7 +6,9 @@ import type {
   ToolCall,
   ToolResponse,
   ToolDefinition,
+  MediaAttachment,
 } from './types.js'
+import { ToolResultImage, ToolResultAudio } from './types.js'
 import { buildPrompt, appendToolCallAndResponse } from './prompt-builder.js'
 import { parseToolCalls, hasToolCalls, extractThinking, extractFinalResponse } from './parser.js'
 
@@ -19,6 +21,18 @@ const NO_OP_LOGGER: Logger = {
   info() {},
   warn() {},
   error() {},
+}
+
+function collectMedia(responses: ToolResponse[]): MediaAttachment[] {
+  const media: MediaAttachment[] = []
+  for (const resp of responses) {
+    for (const v of Object.values(resp.result)) {
+      if (v instanceof ToolResultImage || v instanceof ToolResultAudio) {
+        media.push(v)
+      }
+    }
+  }
+  return media
 }
 
 export class Agent {
@@ -49,7 +63,7 @@ export class Agent {
     let prompt = buildPrompt(systemPrompt, tools, this.history, thinking)
     let iterations = 0
     let toolCallCount = 0
-    let pendingImageDataUrl: string | undefined
+    let pendingMedia: MediaAttachment[] = []
 
     try {
       while (iterations < maxIterations) {
@@ -66,7 +80,7 @@ export class Agent {
           maxTokens: DEFAULT_MAX_TOKENS,
           onChunk: this.options.onChunk,
           onThinkingChunk: this.options.onThinkingChunk,
-          imageDataUrl: pendingImageDataUrl,
+          media: pendingMedia.length > 0 ? pendingMedia : undefined,
         })
 
         // Handle truncated tool calls
@@ -102,7 +116,7 @@ export class Agent {
             }
           }
         }
-        pendingImageDataUrl = undefined
+        pendingMedia = []
 
         const { rest } = extractThinking(output)
 
@@ -144,15 +158,7 @@ export class Agent {
         }
 
         toolCallCount += calls.length
-
-        // Check if any tool response contains an image (e.g. screenshot)
-        for (const resp of responses) {
-          const result = resp.result as Record<string, unknown>
-          if (result?.screenshot && typeof result.screenshot === 'string') {
-            pendingImageDataUrl = result.screenshot as string
-            resp.result = { screenshot: 'captured' }
-          }
-        }
+        pendingMedia = collectMedia(responses)
 
         this.history.push({
           role: 'model',
@@ -162,10 +168,6 @@ export class Agent {
         })
 
         prompt = appendToolCallAndResponse(prompt, calls, responses)
-
-        if (pendingImageDataUrl) {
-          prompt += '<turn|>\n<|turn>user\nHere is the screenshot:\n<|image|><turn|>\n<|turn>model'
-        }
       }
 
       const response = `I've reached the maximum number of tool calls (${maxIterations}). Here's what I found so far based on the tools I've used.`

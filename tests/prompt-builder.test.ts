@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildPrompt, appendToolCallAndResponse } from '../src/prompt-builder.js'
+import { image, audio } from '../src/types.js'
 
 const TOOL = {
   name: 'read_file',
@@ -59,5 +60,46 @@ describe('appendToolCallAndResponse', () => {
     expect(result.startsWith('existing prompt\n')).toBe(true)
     expect(result).toContain('call:read_file{path:<|"|>a.txt<|"|>}')
     expect(result).toContain('response:read_file{content:<|"|>data<|"|>}')
+  })
+})
+
+describe('media values in tool responses', () => {
+  it('renders ToolResultImage as <|image|> token', () => {
+    const result = appendToolCallAndResponse(
+      'prompt',
+      [{ name: 'screenshot', arguments: {} }],
+      [{ name: 'screenshot', result: { screenshot: image('data:image/png;base64,abc') } }],
+    )
+
+    expect(result).toContain('screenshot:<|"|><|image|><|"|>')
+  })
+
+  it('renders ToolResultAudio as <|audio|> token', () => {
+    const result = appendToolCallAndResponse(
+      'prompt',
+      [{ name: 'record', arguments: {} }],
+      [{ name: 'record', result: { recording: audio('data:audio/wav;base64,xyz') } }],
+    )
+
+    expect(result).toContain('recording:<|"|><|audio|><|"|>')
+  })
+
+  it('renders mixed text and media values', () => {
+    const result = appendToolCallAndResponse(
+      'prompt',
+      [{ name: 'capture', arguments: {} }],
+      [{
+        name: 'capture',
+        result: {
+          screenshot: image('data:image/png;base64,abc'),
+          width: 1920,
+          status: 'ok',
+        },
+      }],
+    )
+
+    expect(result).toContain('screenshot:<|"|><|image|><|"|>')
+    expect(result).toContain('width:1920')
+    expect(result).toContain('status:<|"|>ok<|"|>')
   })
 })

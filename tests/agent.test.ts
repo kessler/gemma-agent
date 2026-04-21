@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { Agent } from '../src/agent.js'
-import type { ModelBackend, ToolDefinition, Logger } from '../src/types.js'
+import { image, audio, ToolResultImage, ToolResultAudio } from '../src/types.js'
+import type { ModelBackend, ToolDefinition, Logger, GenerateOptions } from '../src/types.js'
 
 function createMockBackend(responses: string[]): ModelBackend {
   let i = 0
@@ -32,7 +33,7 @@ const failingTool: ToolDefinition = {
 const screenshotTool: ToolDefinition = {
   name: 'take_screenshot',
   description: 'Takes a screenshot',
-  execute: async () => ({ screenshot: 'data:image/png;base64,abc123' }),
+  execute: async () => ({ screenshot: image('data:image/png;base64,abc123') }),
 }
 
 describe('Agent', () => {
@@ -227,7 +228,37 @@ describe('Agent', () => {
     expect(onToolResponse).toHaveBeenCalledWith({ name: 'echo', result: { echoed: 'test' } })
   })
 
-  it('handles screenshot tool responses', async () => {
+  it('passes media from image tool results to generateRaw', async () => {
+    const generateRaw = vi.fn()
+      .mockResolvedValueOnce('<|tool_call>call:take_screenshot{}<tool_call|>')
+      .mockResolvedValueOnce('Here is what I see.')
+
+    const backend: ModelBackend = {
+      generateRaw,
+      countTokens: (text: string) => text.length,
+      contextLimit: 100_000,
+      abort: () => {},
+    }
+    const agent = new Agent({
+      model: backend,
+      systemPrompt: 'System.',
+      tools: [screenshotTool],
+    })
+
+    const result = await agent.run('Take a screenshot')
+    expect(result.response).toBe('Here is what I see.')
+
+    // First call: no media
+    expect(generateRaw.mock.calls[0][1].media).toBeUndefined()
+
+    // Second call: media contains the image
+    const media = generateRaw.mock.calls[1][1].media
+    expect(media).toHaveLength(1)
+    expect(media[0]).toBeInstanceOf(ToolResultImage)
+    expect(media[0].content).toBe('data:image/png;base64,abc123')
+  })
+
+  it('stores image tool result in history without mutation', async () => {
     const backend = createMockBackend([
       '<|tool_call>call:take_screenshot{}<tool_call|>',
       'Here is what I see on the page.',
@@ -238,13 +269,47 @@ describe('Agent', () => {
       tools: [screenshotTool],
     })
 
-    const result = await agent.run('Take a screenshot')
-    expect(result.response).toBe('Here is what I see on the page.')
+    await agent.run('Take a screenshot')
 
-    // Verify the screenshot was replaced in history
     const history = agent.getHistory()
     const modelTurn = history.find(m => m.toolResponses?.length)
-    expect(modelTurn?.toolResponses?.[0].result).toEqual({ screenshot: 'captured' })
+    const screenshot = modelTurn?.toolResponses?.[0].result.screenshot
+    expect(screenshot).toBeInstanceOf(ToolResultImage)
+    expect((screenshot as ToolResultImage).content).toBe('data:image/png;base64,abc123')
+  })
+
+  it('collects media from multiple tool responses in one iteration', async () => {
+    const multiImageTool: ToolDefinition = {
+      name: 'capture_both',
+      description: 'Returns image and audio',
+      execute: async () => ({
+        screenshot: image('data:image/png;base64,img'),
+        recording: audio('data:audio/wav;base64,aud'),
+      }),
+    }
+
+    const generateRaw = vi.fn()
+      .mockResolvedValueOnce('<|tool_call>call:capture_both{}<tool_call|>')
+      .mockResolvedValueOnce('Got both.')
+
+    const backend: ModelBackend = {
+      generateRaw,
+      countTokens: (text: string) => text.length,
+      contextLimit: 100_000,
+      abort: () => {},
+    }
+    const agent = new Agent({
+      model: backend,
+      systemPrompt: 'System.',
+      tools: [multiImageTool],
+    })
+
+    await agent.run('Capture both')
+
+    const media = generateRaw.mock.calls[1][1].media
+    expect(media).toHaveLength(2)
+    expect(media[0]).toBeInstanceOf(ToolResultImage)
+    expect(media[1]).toBeInstanceOf(ToolResultAudio)
   })
 
   it('maintains conversation history across multiple runs', async () => {

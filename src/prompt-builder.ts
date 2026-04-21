@@ -1,4 +1,5 @@
-import type { ToolDefinition, ToolCall, ToolResponse, ConversationMessage } from './types.js'
+import type { ToolDefinition, ToolCall, ToolResponse, ConversationMessage, ToolResultValue } from './types.js'
+import { ToolResultImage, ToolResultAudio } from './types.js'
 
 function formatToolDeclaration(tool: ToolDefinition): string {
   const schema: Record<string, unknown> = {
@@ -10,12 +11,16 @@ function formatToolDeclaration(tool: ToolDefinition): string {
   return `<|tool>declaration:${tool.name}${JSON.stringify(schema)}<tool|>`
 }
 
+function formatValue(v: ToolResultValue): string {
+  if (v instanceof ToolResultImage) return `<|"|><|image|><|"|>`
+  if (v instanceof ToolResultAudio) return `<|"|><|audio|><|"|>`
+  if (typeof v === 'string') return `<|"|>${v}<|"|>`
+  return `${v}`
+}
+
 function formatToolResponse(response: ToolResponse): string {
-  const entries = Object.entries(response.result as Record<string, unknown>)
-    .map(([k, v]) => {
-      if (typeof v === 'string') return `${k}:<|"|>${v}<|"|>`
-      return `${k}:${v}`
-    })
+  const entries = Object.entries(response.result)
+    .map(([k, v]) => `${k}:${formatValue(v)}`)
     .join(',')
   return `response:${response.name}{${entries}}<tool_response|>`
 }

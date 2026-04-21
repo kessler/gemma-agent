@@ -52,7 +52,43 @@ interface ModelBackend {
   readonly contextLimit: number
   abort(): void
 }
+
+interface GenerateOptions {
+  maxTokens?: number
+  onChunk?: (text: string) => void
+  onThinkingChunk?: (text: string) => void
+  media?: MediaAttachment[]
+}
 ```
+
+## Multimodal Tool Results
+
+Tools can return images and audio alongside text data using the `image()` and `audio()` factory functions:
+
+```ts
+import { image, audio } from '@kessler/gemma-agent'
+
+const screenshotTool = {
+  name: 'take_screenshot',
+  description: 'Capture a screenshot of the current page',
+  execute: async () => ({
+    screenshot: image('data:image/png;base64,...'),
+    width: 1920,
+    height: 1080,
+  }),
+}
+
+const recordTool = {
+  name: 'record_audio',
+  description: 'Record audio from the microphone',
+  execute: async () => ({
+    recording: audio('data:audio/wav;base64,...'),
+    duration: '3.2s',
+  }),
+}
+```
+
+Media values are rendered as `<|image|>` / `<|audio|>` tokens in the prompt and routed through the multimodal processor path via `GenerateOptions.media`. The model sees the actual image/audio content, while the text prompt stays compact.
 
 ## Agent Options
 
