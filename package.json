@@ -1,6 +1,6 @@
 {
   "name": "@kessler/gemma-agent",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Gemma 4 agent reasoning loop with tool calling",
   "author": "Yaniv Kessler",
   "type": "module",
