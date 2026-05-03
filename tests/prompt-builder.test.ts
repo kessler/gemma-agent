@@ -63,6 +63,41 @@ describe('appendToolCallAndResponse', () => {
   })
 })
 
+describe('non-string values in tool responses', () => {
+  it('serializes object values with JSON.stringify instead of [object Object]', () => {
+    const result = appendToolCallAndResponse(
+      'prompt',
+      [{ name: 'search', arguments: {} }],
+      [{ name: 'search', result: { results: [{ path: 'foo.md', score: 0.5 }] } as any }],
+    )
+
+    expect(result).not.toContain('[object Object]')
+    expect(result).toContain('results:<|"|>[{"path":"foo.md","score":0.5}]<|"|>')
+  })
+
+  it('serializes nested object values', () => {
+    const result = appendToolCallAndResponse(
+      'prompt',
+      [{ name: 'lookup', arguments: {} }],
+      [{ name: 'lookup', result: { data: { nested: true } } as any }],
+    )
+
+    expect(result).not.toContain('[object Object]')
+    expect(result).toContain('data:<|"|>{"nested":true}<|"|>')
+  })
+
+  it('preserves number and boolean formatting', () => {
+    const result = appendToolCallAndResponse(
+      'prompt',
+      [{ name: 'info', arguments: {} }],
+      [{ name: 'info', result: { count: 42, active: true } as any }],
+    )
+
+    expect(result).toContain('count:42')
+    expect(result).toContain('active:true')
+  })
+})
+
 describe('media values in tool responses', () => {
   it('renders ToolResultImage as <|image|> token', () => {
     const result = appendToolCallAndResponse(

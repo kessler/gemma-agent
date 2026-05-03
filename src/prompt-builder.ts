@@ -15,6 +15,7 @@ function formatValue(v: ToolResultValue): string {
   if (v instanceof ToolResultImage) return `<|"|><|image|><|"|>`
   if (v instanceof ToolResultAudio) return `<|"|><|audio|><|"|>`
   if (typeof v === 'string') return `<|"|>${v}<|"|>`
+  if (typeof v === 'object') return `<|"|>${JSON.stringify(v)}<|"|>`
   return `${v}`
 }
 
@@ -29,6 +30,7 @@ function formatToolCallArgs(call: ToolCall): string {
   return Object.entries(call.arguments)
     .map(([k, v]) => {
       if (typeof v === 'string') return `${k}:<|"|>${v}<|"|>`
+      if (typeof v === 'object') return `${k}:<|"|>${JSON.stringify(v)}<|"|>`
       return `${k}:${v}`
     })
     .join(',')
